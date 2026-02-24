@@ -155,3 +155,11 @@ cython_debug/
 .envrc
 .vscode/
 .export/
+
+# beancount-sqlite outputs
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+output.sql
+.uv/

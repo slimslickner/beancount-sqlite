@@ -14,14 +14,14 @@ The phases build in layers: correct infrastructure first, then richer data cover
 
 Replace the current SQL-file-generation approach with direct SQLite writing using the `sqlite3` stdlib module.
 
-- [ ] Convert to a `uv` project: add `pyproject.toml`, remove `requirements.txt`, run `uv sync`
-- [ ] Write directly to a `.db` file instead of generating a `.sql` text file
-- [ ] Use parameterized queries throughout (eliminate string interpolation)
-- [ ] Replace positional ID generation (`eid + 1`, `(eid+1)*1000+pid+1`) with proper `AUTOINCREMENT`
-- [ ] Remove debug `print()` statements; add structured `logging`
-- [ ] Upgrade from beancount v2 (`beancount==2.3.6`) to beancount v3
-- [ ] Add `date` column to the `transaction` table (currently only exists on `posting`)
-- [ ] Drop binary blob storage from `document` table — store relative file path only
+- [x] Convert to a `uv` project: add `pyproject.toml`, remove `requirements.txt`, run `uv sync`
+- [x] Write directly to a `.db` file instead of generating a `.sql` text file
+- [x] Use parameterized queries throughout (eliminate string interpolation)
+- [x] Replace positional ID generation (`eid + 1`, `(eid+1)*1000+pid+1`) with proper `AUTOINCREMENT`
+- [x] Remove debug `print()` statements; add structured `logging`
+- [x] Upgrade from beancount v2 (`beancount==2.3.6`) to beancount v3
+- [x] Add `date` column to the `transaction` table (currently only exists on `posting`)
+- [x] Drop binary blob storage from `document` table — store relative file path only
 
 **CLI target:**
 ```
@@ -83,8 +83,8 @@ Remove the existing JSON `meta` blobs from `account` and `commodity` in favor of
 
 Make the package installable as a proper Python package with a CLI entry point.
 
-- [ ] Add `pyproject.toml` with package metadata, dependencies, and build config
-- [ ] Expose `beancount-sqlite` CLI entry point
+- [x] Add `pyproject.toml` with package metadata, dependencies, and build config
+- [x] Expose `beancount-sqlite` CLI entry point
 - [ ] Support installation as a path dependency from other projects:
   ```toml
   # In ../beancount/pyproject.toml
