@@ -633,7 +633,7 @@ class BeanSQLiteLoader:
             if not isinstance(entry, data.Custom):
                 continue
             self._conn.execute(
-                'INSERT INTO "custom" (date, type, values) VALUES (?, ?, ?)',
+                'INSERT INTO "custom" (date, type, "values") VALUES (?, ?, ?)',
                 (
                     entry.date.isoformat(),
                     entry.type,
