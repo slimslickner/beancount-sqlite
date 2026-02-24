@@ -99,13 +99,20 @@ Add SQL views that form the primary **query surface** for the database. The norm
 
 Each view encodes domain vocabulary — `v_spending` is self-explanatory in a way that `SELECT p.* FROM posting p JOIN account a ON p.account_id = a.id WHERE a.account_type = 'Expenses'` is not. This makes the database usable from any SQL-capable tool without requiring knowledge of the full schema.
 
-- [ ] `v_transactions` — transactions with date, payee, narration, tags (comma-separated), account names
-- [ ] `v_postings` — postings joined with account name, transaction date, payee, narration
-- [ ] `v_spending` — expense postings with amount, account hierarchy, payee, date
-- [ ] `v_income` — income postings, similar to spending
-- [ ] `v_net_worth` — asset and liability balances by account
-- [ ] `v_transfers` — postings with `matched_transfer_account` metadata (from metadata layer)
-- [ ] `v_posting_metadata_pivot` — wide-format posting metadata for common keys
+Views are the intended query surface — never query raw tables directly. Each view flattens joins and metadata into clean, named columns for use by SQL tools and LLMs.
+
+- [x] `v_accounts` — accounts with `label` / `group` from `open_metadata`
+- [x] `v_transactions` — transactions with comma-separated `tags` and `links`
+- [x] `v_postings` — all postings with account and transaction context
+- [x] `v_spending` — filtered subset of `v_postings` where `account_type = 'Expenses'`
+- [x] `v_income` — filtered subset of `v_postings` where `account_type = 'Income'`
+
+**Semantic layer** — accounts and tags carry human-readable labels and groups:
+
+- [x] Account `label` and `group`: set via `open_metadata` keys in the `.bean` file; exposed as `account_label` / `account_group` in all posting views
+- [x] Tag `label` and `group`: populated via `--tags-yaml <file>` using the same YAML format as `check_valid_tags.py` (keys: `description` → label, `group`)
+
+**User-extensible SQL** — `--post-sql <file>` (repeatable) runs additional SQL files after the main load commits, enabling custom views, indexes, or derived tables without modifying this package.
 
 ## Phase 6: LLM Schema Documentation
 

@@ -51,7 +51,9 @@ CREATE TABLE IF NOT EXISTS "transaction" (
 -- Tag table
 CREATE TABLE IF NOT EXISTS tag (
     id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE
+    name TEXT NOT NULL UNIQUE,
+    label TEXT,
+    "group" TEXT
 );
 
 -- Transaction <-> tag junction

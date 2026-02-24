@@ -5,7 +5,7 @@ description = "Load Beancount ledger data into a queryable SQLite database"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.13"
-dependencies = ["beancount>=3.2.0"]
+dependencies = ["beancount>=3.2.0", "pyyaml>=6.0"]
 
 [project.scripts]
 beancount-sqlite = "beancount_sqlite.cli:main"
@@ -22,3 +22,6 @@ dev = ["ruff", "ty", "sqlfluff"]
 
 [tool.ruff.lint]
 ignore = ["COM812"]
+
+[tool.sqlfluff.core]
+dialect = "sqlite"

@@ -29,7 +29,11 @@ def resolve_db_path(explicit: Path | None) -> Path:
 def _cmd_load(args: argparse.Namespace) -> None:
     db_path = resolve_db_path(args.db_file)
     loader = BeanSQLiteLoader(db_path)
-    loader.load(args.beancount_file)
+    loader.load(
+        args.beancount_file,
+        post_sql_files=args.post_sql or [],
+        tags_yaml=args.tags_yaml,
+    )
 
 
 def main() -> None:
@@ -63,6 +67,28 @@ def main() -> None:
         help=(
             "Path for the output .db file. "
             "Defaults to BEANCOUNT_DB env var, then ledger.db in the current directory."
+        ),
+    )
+    load_parser.add_argument(
+        "--post-sql",
+        type=Path,
+        metavar="FILE",
+        action="append",
+        default=None,
+        help=(
+            "SQL file to execute after the main load commits. "
+            "Can be repeated to run multiple files in order. "
+            "Can be used for creating custom views or modifying schema in place."
+        ),
+    )
+    load_parser.add_argument(
+        "--tags-yaml",
+        type=Path,
+        metavar="FILE",
+        default=None,
+        help=(
+            "YAML file mapping tag names to label/group metadata. "
+            "Populates the label and group columns on the tag table."
         ),
     )
     load_parser.set_defaults(func=_cmd_load)

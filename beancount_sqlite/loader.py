@@ -11,6 +11,8 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from beancount import loader as bean_loader
 from beancount.core import amount as bean_amount
 from beancount.core import data
@@ -85,7 +87,12 @@ class BeanSQLiteLoader:
         self._account_map: dict[str, int] = {}
         self._category_map: dict[str, int] = {}
 
-    def load(self, bean_file: Path) -> None:
+    def load(
+        self,
+        bean_file: Path,
+        post_sql_files: list[Path] | None = None,
+        tags_yaml: Path | None = None,
+    ) -> None:
         """Parse *bean_file* and write all directives into the SQLite database."""
         log.info("Parsing %s", bean_file)
         entries, errors, _ = bean_loader.load_file(str(bean_file))
@@ -116,7 +123,12 @@ class BeanSQLiteLoader:
             self._import_events(entries)
             self._import_queries(entries)
             self._import_customs(entries)
+            if tags_yaml is not None:
+                self._import_tags_yaml(tags_yaml)
+            self._init_views()
             conn.commit()
+            for sql_file in post_sql_files or []:
+                self._exec_post_sql(sql_file)
         except Exception:
             conn.rollback()
             raise
@@ -133,6 +145,51 @@ class BeanSQLiteLoader:
         assert self._conn is not None
         schema = (files("beancount_sqlite") / "schema.sql").read_text()
         self._conn.executescript(schema)
+
+    def _init_views(self) -> None:
+        assert self._conn is not None
+        views = (files("beancount_sqlite") / "views.sql").read_text()
+        self._conn.executescript(views)
+
+    def _exec_post_sql(self, sql_file: Path) -> None:
+        """Execute a user-provided SQL file in its own transaction."""
+        assert self._conn is not None
+        log.info("Running post-sql: %s", sql_file)
+        sql = sql_file.read_text()
+        try:
+            self._conn.executescript(sql)
+        except Exception:
+            log.error("post-sql failed: %s", sql_file)
+            raise
+
+    def _import_tags_yaml(self, tags_yaml: Path) -> None:
+        """Populate tag label/group from a tags YAML file.
+
+        Expected format:
+          tags:
+            tag-name:
+              description: "Human-readable label"
+              group: "optional group"
+        """
+        assert self._conn is not None
+        log.info("Loading tags from %s", tags_yaml)
+        raw = yaml.safe_load(tags_yaml.read_text())
+        tags = raw.get("tags") if isinstance(raw, dict) else None
+        if not tags:
+            log.warning("No 'tags' key found in %s — skipping", tags_yaml)
+            return
+        for name, attrs in tags.items():
+            if not isinstance(attrs, dict):
+                continue
+            label = attrs.get("description")
+            group = attrs.get("group")
+            self._conn.execute(
+                'INSERT INTO tag (name, label, "group") VALUES (?, ?, ?)'
+                " ON CONFLICT (name) DO UPDATE SET"
+                "   label = excluded.label,"
+                '   "group" = excluded."group"',
+                (name, label, group),
+            )
 
     def _clear_tables(self) -> None:
         assert self._conn is not None
@@ -263,7 +320,9 @@ class BeanSQLiteLoader:
             )
             assert cur.lastrowid is not None
             txn_id = cur.lastrowid
-            self._insert_meta("transaction_metadata", "transaction_id", txn_id, entry.meta)
+            self._insert_meta(
+                "transaction_metadata", "transaction_id", txn_id, entry.meta
+            )
 
             for tag in entry.tags:
                 self._conn.execute(
@@ -363,7 +422,9 @@ class BeanSQLiteLoader:
                 ),
             )
             assert acur.lastrowid is not None
-            self._insert_meta("balance_metadata", "assertion_id", acur.lastrowid, entry.meta)
+            self._insert_meta(
+                "balance_metadata", "assertion_id", acur.lastrowid, entry.meta
+            )
 
     def _import_prices(self, entries: list[Any]) -> None:
         assert self._conn is not None
@@ -381,7 +442,9 @@ class BeanSQLiteLoader:
                 ),
             )
             assert pricecur.lastrowid is not None
-            self._insert_meta("price_metadata", "price_id", pricecur.lastrowid, entry.meta)
+            self._insert_meta(
+                "price_metadata", "price_id", pricecur.lastrowid, entry.meta
+            )
 
     def _import_commodities(self, entries: list[Any]) -> None:
         assert self._conn is not None
@@ -452,9 +515,7 @@ class BeanSQLiteLoader:
                 (entry.date.isoformat(), account_id, entry.comment),
             )
             assert notecur.lastrowid is not None
-            self._insert_meta(
-                "note_metadata", "note_id", notecur.lastrowid, entry.meta
-            )
+            self._insert_meta("note_metadata", "note_id", notecur.lastrowid, entry.meta)
 
     def _import_events(self, entries: list[Any]) -> None:
         assert self._conn is not None
