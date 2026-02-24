@@ -2,7 +2,13 @@
 
 Enhancements to convert this from a SQL-file generator into a robust, installable Beancount → SQLite loader with full directive and metadata coverage.
 
-The whole process should not execute if bean-check fails on the ledger - specifically because balances should be inherently true at all times. The assumption is that if data is being loaded to SQLite, then assertions are not needed.
+The whole process should not execute if bean-check fails on the ledger — specifically because balances should be inherently true at all times. The assumption is that if data is being loaded to SQLite, then assertions are not needed.
+
+## Purpose
+
+This package is a **read-only analytics layer**: Beancount is the source of truth, and this loader mirrors ledger data into a queryable SQLite database. The interface is standard SQL — not BQL (Beancount's built-in query language). Standard SQL is universal, fully expressive (CTEs, window functions, aggregations), and supported by any SQL-capable tool. BQL is purpose-built for Beancount's own query interface and lacks the expressiveness needed for general analytics.
+
+The phases build in layers: correct infrastructure first, then richer data coverage, then a simplified query surface. The end result is a database that accurately reflects the full ledger and is easy to query without deep knowledge of Beancount internals.
 
 ## Phase 1: Core Infrastructure Rewrite
 
@@ -36,6 +42,8 @@ Each table follows the same pattern: `id`, `date`, foreign key to relevant entit
 ## Phase 3: Metadata Layer
 
 Add queryable key/value metadata tables for all directive types. Currently, metadata is either lost entirely (transactions, postings) or stored as a non-queryable JSON blob (accounts, commodities).
+
+Metadata carries critical analytical context that can't be recovered from the core directive fields alone — things like the originating institution, importer source, transfer counterparty, and commodity classification. Storing it as a JSON blob means it can't be filtered, joined, or aggregated in SQL. Normalized key/value tables make every metadata field a first-class queryable column.
 
 **New tables:**
 
@@ -86,7 +94,9 @@ Make the package installable as a proper Python package with a CLI entry point.
 
 ## Phase 5: Analytical Views
 
-Add SQL views for common analytical queries, making it easier for both humans and LLMs to query the data without writing complex joins.
+Add SQL views that form the primary **query surface** for the database. The normalized schema requires multi-table joins to answer most useful questions; these views pre-encode those joins so callers can write simple queries against named, domain-meaningful tables rather than the raw schema.
+
+Each view encodes domain vocabulary — `v_spending` is self-explanatory in a way that `SELECT p.* FROM posting p JOIN account a ON p.account_id = a.id WHERE a.account_type = 'Expenses'` is not. This makes the database usable from any SQL-capable tool without requiring knowledge of the full schema.
 
 - [ ] `v_transactions` — transactions with date, payee, narration, tags (comma-separated), account names
 - [ ] `v_postings` — postings joined with account name, transaction date, payee, narration
@@ -110,3 +120,4 @@ Generate schema documentation suitable for inclusion in an LLM system prompt.
 - Validation (balance checks, lot tracking, inventory assertions) — beancount itself handles this
 - Importing/writing back to `.bean` files — read-only analytics layer only
 - Storing document binary data — file paths are sufficient
+- Query interface or AI tooling — this package provides the data layer only; downstream tools consume the SQL views
