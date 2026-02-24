@@ -85,12 +85,13 @@ Make the package installable as a proper Python package with a CLI entry point.
 
 - [x] Add `pyproject.toml` with package metadata, dependencies, and build config
 - [x] Expose `beancount-sqlite` CLI entry point
-- [ ] Support installation as a path dependency from other projects:
+- [x] Support installation as a path dependency from other projects:
   ```toml
   # In ../beancount/pyproject.toml
   beancount-sqlite = { path = "../beancount-sqlite" }
   ```
-- [ ] Publish to PyPI for general Beancount community use
+- [x] Add description, readme, and license to `pyproject.toml`; rewrite `README.md`
+- [ ] Publish to PyPI for general Beancount community use (deferred — local/GitHub installs sufficient for now)
 
 ## Phase 5: Analytical Views
 
