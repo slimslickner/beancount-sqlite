@@ -8,11 +8,15 @@ Forked from [beanpost](https://github.com/gerdemb/beanpost).
 
 ## Installation
 
-**From a local path** (add to your project's `pyproject.toml`):
+**From a local path:**
 
 ```toml
+# pyproject.toml
 [tool.uv.sources]
 beancount-sqlite = { path = "../beancount-sqlite" }
+
+[project]
+dependencies = ["beancount-sqlite"]
 ```
 
 **From GitHub:**
@@ -22,64 +26,58 @@ beancount-sqlite = { path = "../beancount-sqlite" }
 beancount-sqlite = { git = "https://github.com/slimslickner/beancount-sqlite" }
 ```
 
-Then add to your dependencies:
-
-```toml
-[project]
-dependencies = ["beancount-sqlite"]
-```
-
 ## Usage
 
-```
+```bash
 beancount-sqlite load <beancount_file> [db_file]
 ```
 
-The database file defaults to `ledger.db` in the current directory. Override with a positional argument or the `BEANCOUNT_DB` environment variable.
+The database file defaults to `ledger.db` in the current directory, or the `BEANCOUNT_DB` environment variable.
 
 ```bash
-uv run beancount-sqlite load main.bean
-uv run beancount-sqlite load main.bean ~/finance/ledger.db
-uv run beancount-sqlite -v load main.bean          # verbose logging
-uv run beancount-sqlite load main.bean --tags-yaml tags.yaml
-uv run beancount-sqlite load main.bean --post-sql custom.sql
+beancount-sqlite load main.bean
+beancount-sqlite load main.bean ~/finance/ledger.db
+beancount-sqlite -v load main.bean                     # verbose logging
+beancount-sqlite load main.bean \
+  --tags-yaml tags.yaml \
+  --post-sql custom_views.sql
 ```
-
-Loading aborts if `bean-check` reports errors — the database is only written when the ledger is valid. Each load writes to a temp file and renames it atomically, so a failed load never corrupts the existing database.
-
-A schema summary is written to `{db}.schema.md` on every load (e.g. `ledger.schema.md`). This file is suitable for embedding in an LLM system prompt.
-
-### Flags
 
 | Flag | Description |
 |---|---|
-| `--tags-yaml FILE` | Populate tag `label` and `group` from a YAML file (same format as [`check_valid_tags`](https://github.com/slimslickner/beancount-plugins/blob/main/beancount_plugins/check_valid_tags.py) plugin) |
-| `--post-sql FILE` | Run a SQL file after the main load. Use for custom views, indexes, or `schema_description`s. |
+| `--tags-yaml FILE` | Populate tag `label`/`group` from a YAML file — same format as the [`check_valid_tags`](https://github.com/slimslickner/beancount-plugins/blob/main/beancount_plugins/check_valid_tags.py) plugin |
+| `--post-sql FILE` | Run a SQL file after the main load; repeatable. Use for custom views, indexes, or `schema_description` entries. |
+
+Loading aborts if `bean-check` reports errors. Each run writes to a temp file and renames atomically — a failed load never corrupts the existing database.
+
+A schema summary (`ledger.schema.md`) is written alongside the database on every load, suitable for embedding in an LLM system prompt.
 
 ## Query surface
 
-Query using the **views** — they flatten joins and metadata into clean, named columns. Don't query raw tables directly. Additional views can be defined using the `--post-sql` flag.
+Query using the **views** — they flatten joins and metadata into clean, named columns. Don't query raw tables directly. Additional views can be defined via `--post-sql`.
 
 | View | Description |
 |---|---|
-| `v_accounts` | Accounts with `label` and `group` from `open_metadata` |
+| `v_accounts` | Accounts with `label` and `group` |
 | `v_transactions` | Transactions with comma-separated `tags` and `links` |
 | `v_postings` | All postings with account and transaction context |
 | `v_spending` | Expense postings — filtered subset of `v_postings` |
 | `v_income` | Income postings — filtered subset of `v_postings` |
 
 **Conventions:**
-- Amounts are stored as `TEXT` — cast for arithmetic: `CAST(amount_number AS REAL)`
-- Dates are `TEXT` in ISO 8601 format
-- Tags and links are `TEXT` comma-separated strings
+- Amounts: `TEXT` — cast for arithmetic: `CAST(amount_number AS REAL)`
+- Dates: `TEXT` in ISO 8601 format (`YYYY-MM-DD`)
+- Tags/links: comma-separated `TEXT` string
 
 ## Semantic layer
 
-Account labels and groups are set directly in the `.bean` file via metadata on `open` directives (the [`check_valid_metadata`](https://github.com/slimslickner/beancount-plugins/blob/main/beancount_plugins/check_valid_metadata.py) plugin can help control this):
+Accounts and tags carry human-readable labels and groups, exposed as columns in the views.
+
+**Accounts** — set metadata on `open` directives in your `.bean` file (the [`check_valid_metadata`](https://github.com/slimslickner/beancount-plugins/blob/main/beancount_plugins/check_valid_metadata.py) plugin can enforce these):
 
 ```beancount
 2020-01-01 open Assets:Checking:Primary USD
-  label: "Primary Checking used for Bill Pay and Direct Deposit"
+  label: "Primary Checking"
   group: "Cash"
 
 2020-01-01 open Expenses:Groceries USD
@@ -87,50 +85,50 @@ Account labels and groups are set directly in the `.bean` file via metadata on `
   group: "Living Expenses"
 ```
 
-These appear as `account_label` and `account_group` in all posting views.
+These surface as `account_label` and `account_group` in all posting views.
 
-Tag labels and groups come from a YAML file passed via `--tags-yaml`:
+**Tags** — provide a YAML file via `--tags-yaml` (same format as `check_valid_tags`):
 
 ```yaml
 tags:
   vacation-2024:
-    description: "Summer 2024 vacation to Hawaii"
+    description: "Summer 2024 vacation"
     group: "Vacations"
 ```
 
-## Extending the schema
+## Extending
 
-Use `--post-sql` to add custom views, indexes, or derived tables without modifying this package:
-
-```bash
-beancount-sqlite load main.bean --post-sql my_views.sql
-```
-
-To document a custom view in the schema summary, insert into `schema_description`:
+Use `--post-sql` to add custom views or derived tables without modifying this package. To include a custom view in the auto-generated schema summary, add a row to `schema_description`:
 
 ```sql
+-- custom_views.sql
+CREATE VIEW v_monthly_spending AS
+SELECT
+    strftime('%Y-%m', "date") AS month,
+    account_group,
+    SUM(CAST(amount_number AS REAL)) AS total
+FROM v_spending
+GROUP BY 1, 2;
+
 INSERT INTO schema_description (object_type, name, description)
-VALUES ('view', 'v_my_view', 'My custom view description');
+VALUES ('view', 'v_monthly_spending', 'Monthly spending totals by account group.');
 ```
 
-## Raw schema
+## Schema
 
-All Beancount directives are stored in normalized tables:
+All Beancount directives are stored in normalized tables. See the auto-generated `*.schema.md` for the full column reference.
 
-| Table | Source |
+| Tables | Source directive |
 |---|---|
-| `account`, `account_category`, `account_currency` | Open / Close |
-| `transaction`, `posting`, `tag`, `link` | Transaction |
-| `assertion` | Balance |
-| `price` | Price |
-| `commodity` | Commodity |
-| `document` | Document |
-| `note` | Note |
-| `event` | Event |
-| `query` | Query |
-| `custom` | Custom |
+| `account`, `account_category`, `account_currency` | `open` / `close` |
+| `transaction`, `posting`, `tag`, `link` | `txn` |
+| `assertion` | `balance` |
+| `price` | `price` |
+| `commodity` | `commodity` |
+| `document`, `note`, `event`, `query`, `custom` | remaining directives |
+| `*_metadata` | per-directive key/value metadata |
 
-Metadata for every directive type is stored in normalized key/value tables (`open_metadata`, `posting_metadata`, `transaction_metadata`, etc.) with a `value_type` column encoding the original grammar type (`str`, `bool`, `date`, `decimal`, `amount`, `null`).
+Metadata value types: `str`, `bool`, `date`, `decimal`, `amount`, `null`.
 
 ## Development
 
