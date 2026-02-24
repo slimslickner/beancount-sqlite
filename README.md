@@ -1,10 +1,10 @@
 # beancount-sqlite
 
-A read-only analytics layer that loads [Beancount](https://beancount.github.io/) ledger data into a queryable SQLite database.
+An opinionated and plugin-ready read-only analytics layer that loads [Beancount](https://beancount.github.io/) ledger data into a queryable SQLite database.
 
 Beancount is the source of truth. This tool mirrors ledger data into SQLite so you can query it with standard SQL — CTEs, window functions, aggregations — from any SQL-capable tool or LLM.
 
-Forked from [beanpost](https://github.com/gerdemb/beanpost).
+Forked from [beanpost](https://github.com/BarrySong97/beancount-sqlite).
 
 ## Installation
 
