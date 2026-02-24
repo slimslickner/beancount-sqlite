@@ -116,12 +116,11 @@ Views are the intended query surface — never query raw tables directly. Each v
 
 ## Phase 6: LLM Schema Documentation
 
-Generate schema documentation suitable for inclusion in an LLM system prompt.
+Auto-generate a schema summary from the live `.db` file, suitable for embedding in an LLM system prompt. Output is `{db}.schema.md`, written automatically on every `load`.
 
-- [ ] Auto-generate a schema summary (tables, columns, example values) from the live `.db` file
-- [ ] Include view definitions and their purpose
-- [ ] Output as Markdown or plain text for embedding in Ollama/Claude prompts
-- [ ] Used by downstream LLM query tools (e.g. a CLI that answers natural language questions)
+- [x] Auto-generate a schema summary (views + tables, column names and types) from the live `.db` file
+- [x] Output as Markdown alongside the `.db` file (`ledger.db` → `ledger.schema.md`)
+- [x] View descriptions stored in `schema_description` table — seeded with built-in defaults, overridable via `--post-sql`; custom views can add their own descriptions the same way
 
 ## Non-Goals
 

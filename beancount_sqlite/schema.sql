@@ -266,3 +266,14 @@ CREATE TABLE IF NOT EXISTS price_metadata (
     value_type TEXT NOT NULL,
     FOREIGN KEY (price_id) REFERENCES price (id)
 );
+
+-- Schema documentation table.
+-- Stores human-readable descriptions for tables and views.
+-- Seeded by the loader for built-in objects; extend via --post-sql to
+-- describe custom views or override built-in descriptions.
+CREATE TABLE IF NOT EXISTS schema_description (
+    object_type TEXT NOT NULL CHECK (object_type IN ('table', 'view')),
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    PRIMARY KEY (object_type, name)
+);

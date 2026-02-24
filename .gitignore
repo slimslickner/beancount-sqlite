@@ -158,8 +158,10 @@ cython_debug/
 
 # beancount-sqlite outputs
 *.db
+*.db.tmp
 *.db-journal
 *.db-wal
 *.db-shm
+*.schema.md
 output.sql
 .uv/

@@ -22,37 +22,37 @@ log = logging.getLogger(__name__)
 # Keys always stripped from metadata before storing.
 _META_SKIP = frozenset({"filename", "lineno"})
 
-# Deletion order: children before parents to satisfy FK constraints.
-# account_category is self-referential, so FK checks are disabled during clear.
-_CLEAR_ORDER = [
-    # metadata tables (reference their parent directive tables)
-    "price_metadata",
-    "document_metadata",
-    "note_metadata",
-    "balance_metadata",
-    "commodity_metadata",
-    "close_metadata",
-    "open_metadata",
-    "posting_metadata",
-    "transaction_metadata",
-    # phase 2 tables
-    '"custom"',
-    '"query"',
-    "event",
-    "note",
-    "document",
-    "assertion",
-    "price",
-    "commodity",
-    "posting",
-    "transaction_link",
-    "transaction_tag",
-    "link",
-    "tag",
-    '"transaction"',
-    "account_currency",
-    "account",
-    "account_category",
+# Default descriptions for built-in views, seeded into schema_description.
+_BUILTIN_DESCRIPTIONS: list[tuple[str, str, str]] = [
+    (
+        "view",
+        "v_accounts",
+        "Accounts with `label` and `group` from open_metadata.",
+    ),
+    (
+        "view",
+        "v_transactions",
+        "Transactions with comma-separated `tags` and `links`.",
+    ),
+    (
+        "view",
+        "v_postings",
+        "All postings joined with account and transaction context. "
+        "Includes `account_label` and `account_group`.",
+    ),
+    (
+        "view",
+        "v_spending",
+        "Expense postings (`account_type = 'Expenses'`). "
+        "Filtered subset of `v_postings`.",
+    ),
+    (
+        "view",
+        "v_income",
+        "Income postings (`account_type = 'Income'`). "
+        "Filtered subset of `v_postings`. "
+        "Note: `amount_number` is typically negative — use `ABS()` for magnitudes.",
+    ),
 ]
 
 
@@ -107,12 +107,15 @@ class BeanSQLiteLoader:
                 )
             raise SystemExit(1)
 
+        # Write to a temp file; rename atomically on success so a failed
+        # load never leaves the existing database in a partial state.
+        tmp_path = self.db_path.with_suffix(".db.tmp")
         log.info("Loading into %s", self.db_path)
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(tmp_path)
         self._conn = conn
+        success = False
         try:
             self._init_schema()
-            self._clear_tables()
             self._import_accounts(entries)
             self._import_transactions(entries)
             self._import_balances(entries)
@@ -126,15 +129,18 @@ class BeanSQLiteLoader:
             if tags_yaml is not None:
                 self._import_tags_yaml(tags_yaml)
             self._init_views()
+            self._seed_schema_descriptions()
             conn.commit()
             for sql_file in post_sql_files or []:
                 self._exec_post_sql(sql_file)
-        except Exception:
-            conn.rollback()
-            raise
+            success = True
         finally:
             conn.close()
             self._conn = None
+            if not success:
+                tmp_path.unlink(missing_ok=True)
+        tmp_path.rename(self.db_path)
+        self._write_schema_doc()
         log.info("Done.")
 
     # ------------------------------------------------------------------
@@ -151,6 +157,14 @@ class BeanSQLiteLoader:
         views = (files("beancount_sqlite") / "views.sql").read_text()
         self._conn.executescript(views)
 
+    def _seed_schema_descriptions(self) -> None:
+        assert self._conn is not None
+        self._conn.executemany(
+            "INSERT OR IGNORE INTO schema_description"
+            " (object_type, name, description) VALUES (?, ?, ?)",
+            _BUILTIN_DESCRIPTIONS,
+        )
+
     def _exec_post_sql(self, sql_file: Path) -> None:
         """Execute a user-provided SQL file in its own transaction."""
         assert self._conn is not None
@@ -161,6 +175,85 @@ class BeanSQLiteLoader:
         except Exception:
             log.error("post-sql failed: %s", sql_file)
             raise
+
+    def _write_schema_doc(self) -> None:
+        """Write a schema summary markdown file alongside the database.
+
+        Output: ``{db_stem}.schema.md`` in the same directory as the database.
+        Suitable for embedding in an LLM system prompt.
+        """
+        doc_path = self.db_path.with_suffix(".schema.md")
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            lines: list[str] = [
+                "# beancount-sqlite schema",
+                "",
+                f"Database: `{self.db_path.name}`",
+                "",
+                "Query using the **views** below — they expose clean, named columns "
+                "without requiring knowledge of the underlying joins.",
+                "",
+                "**Conventions:**",
+                "- Dates: `TEXT` in ISO 8601 format (`YYYY-MM-DD`)",
+                "- Amounts: `TEXT` — cast for arithmetic: `CAST(amount_number AS REAL)`",
+                "- Tags/links: `TEXT` as comma-separated string, e.g. `'vacation,2024'`",
+                "",
+            ]
+
+            desc_rows = conn.execute(
+                "SELECT object_type, name, description FROM schema_description"
+            ).fetchall()
+            descriptions: dict[tuple[str, str], str] = {
+                (row["object_type"], row["name"]): row["description"]
+                for row in desc_rows
+            }
+
+            views = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'view' ORDER BY name"
+            ).fetchall()
+
+            if views:
+                lines += ["## Views", ""]
+                for row in views:
+                    name = row["name"]
+                    desc = descriptions.get(("view", name), "")
+                    lines.append(f"### `{name}`")
+                    if desc:
+                        lines += [desc, ""]
+                    cols = conn.execute(
+                        f'PRAGMA table_info("{name}")'  # noqa: S608
+                    ).fetchall()
+                    lines += ["| column | type |", "|---|---|"]
+                    for col in cols:
+                        col_type = col["type"] or "TEXT"
+                        lines.append(f"| `{col['name']}` | {col_type} |")
+                    lines.append("")
+
+            tables = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+            ).fetchall()
+
+            if tables:
+                lines += ["## Tables", ""]
+                for row in tables:
+                    name = row["name"]
+                    lines.append(f"### `{name}`")
+                    lines.append("")
+                    cols = conn.execute(
+                        f'PRAGMA table_info("{name}")'  # noqa: S608
+                    ).fetchall()
+                    lines += ["| column | type | not null |", "|---|---|---|"]
+                    for col in cols:
+                        col_type = col["type"] or "TEXT"
+                        nn = "yes" if col["notnull"] else ""
+                        lines.append(f"| `{col['name']}` | {col_type} | {nn} |")
+                    lines.append("")
+        finally:
+            conn.close()
+
+        doc_path.write_text("\n".join(lines))
+        log.info("Schema doc written to %s", doc_path)
 
     def _import_tags_yaml(self, tags_yaml: Path) -> None:
         """Populate tag label/group from a tags YAML file.
@@ -190,15 +283,6 @@ class BeanSQLiteLoader:
                 '   "group" = excluded."group"',
                 (name, label, group),
             )
-
-    def _clear_tables(self) -> None:
-        assert self._conn is not None
-        self._conn.execute("PRAGMA foreign_keys = OFF")
-        for table in _CLEAR_ORDER:
-            self._conn.execute(f"DELETE FROM {table}")
-        self._conn.execute("PRAGMA foreign_keys = ON")
-        self._account_map = {}
-        self._category_map = {}
 
     def _ensure_category(self, account_type: str, categories: list[str]) -> int:
         """Return the leaf category ID, creating any missing hierarchy nodes."""
