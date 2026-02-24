@@ -24,22 +24,31 @@ _META_SKIP = frozenset({"filename", "lineno"})
 
 # Default descriptions for built-in views, seeded into schema_description.
 _BUILTIN_DESCRIPTIONS: list[tuple[str, str, str]] = [
+    ("view", "v_accounts", "Accounts with `label` and `group` from open_metadata."),
     (
         "view",
-        "v_accounts",
-        "Accounts with `label` and `group` from open_metadata.",
+        "v_commodities",
+        "Commodities with common metadata keys pivoted as columns: `name`, `asset_class`, `asset_subclass`, `quote`.",
     ),
-    (
-        "view",
-        "v_transactions",
-        "Transactions with comma-separated `tags` and `links`.",
-    ),
+    ("view", "v_tags", "Tags with `label` and `group`."),
+    ("view", "v_transactions", "Transactions with comma-separated `tags` and `links`."),
+    ("view", "v_events", "Life events (job changes, moves, etc.)."),
+    ("view", "v_queries", "Named BQL queries defined in the ledger."),
+    ("view", "v_custom", "Custom directives (Fava config, plugin settings, etc.)."),
     (
         "view",
         "v_postings",
         "All postings joined with account and transaction context. "
-        "Includes `account_label` and `account_group`.",
+        "Includes `account_label` and `account_group` from `v_accounts`.",
     ),
+    (
+        "view",
+        "v_prices",
+        "Price entries with commodity display name from `v_commodities`.",
+    ),
+    ("view", "v_assertions", "Balance assertions with account name, label, and group."),
+    ("view", "v_documents", "Document directives with account name, label, and group."),
+    ("view", "v_notes", "Note directives with account name, label, and group."),
     (
         "view",
         "v_spending",
