@@ -24,13 +24,13 @@ _META_SKIP = frozenset({"filename", "lineno"})
 
 # Default descriptions for built-in views, seeded into schema_description.
 _BUILTIN_DESCRIPTIONS: list[tuple[str, str, str]] = [
-    ("view", "v_accounts", "Accounts with `label` and `group` from open_metadata."),
+    ("view", "v_accounts", "Accounts with `label` from open_metadata."),
     (
         "view",
         "v_commodities",
         "Commodities with common metadata keys pivoted as columns: `name`, `asset_class`, `asset_subclass`, `quote`.",
     ),
-    ("view", "v_tags", "Tags with `label` and `group`."),
+    ("view", "v_tags", "Tags with `label`."),
     ("view", "v_transactions", "Transactions with comma-separated `tags` and `links`."),
     ("view", "v_events", "Life events (job changes, moves, etc.)."),
     ("view", "v_queries", "Named BQL queries defined in the ledger."),
@@ -39,16 +39,16 @@ _BUILTIN_DESCRIPTIONS: list[tuple[str, str, str]] = [
         "view",
         "v_postings",
         "All postings joined with account and transaction context. "
-        "Includes `account_label` and `account_group` from `v_accounts`.",
+        "Includes `account_label` from `v_accounts`.",
     ),
     (
         "view",
         "v_prices",
         "Price entries with commodity display name from `v_commodities`.",
     ),
-    ("view", "v_assertions", "Balance assertions with account name, label, and group."),
-    ("view", "v_documents", "Document directives with account name, label, and group."),
-    ("view", "v_notes", "Note directives with account name, label, and group."),
+    ("view", "v_assertions", "Balance assertions with account name and label."),
+    ("view", "v_documents", "Document directives with account name and label."),
+    ("view", "v_notes", "Note directives with account name and label."),
     (
         "view",
         "v_spending",
@@ -265,13 +265,12 @@ class BeanSQLiteLoader:
         log.info("Schema doc written to %s", doc_path)
 
     def _import_tags_yaml(self, tags_yaml: Path) -> None:
-        """Populate tag label/group from a tags YAML file.
+        """Populate tag label from a tags YAML file.
 
         Expected format:
           tags:
             tag-name:
               description: "Human-readable label"
-              group: "optional group"
         """
         assert self._conn is not None
         log.info("Loading tags from %s", tags_yaml)
@@ -284,13 +283,11 @@ class BeanSQLiteLoader:
             if not isinstance(attrs, dict):
                 continue
             label = attrs.get("description")
-            group = attrs.get("group")
             self._conn.execute(
-                'INSERT INTO tag (name, label, "group") VALUES (?, ?, ?)'
+                "INSERT INTO tag (name, label) VALUES (?, ?)"
                 " ON CONFLICT (name) DO UPDATE SET"
-                "   label = excluded.label,"
-                '   "group" = excluded."group"',
-                (name, label, group),
+                "   label = excluded.label",
+                (name, label),
             )
 
     def _ensure_category(self, account_type: str, categories: list[str]) -> int:

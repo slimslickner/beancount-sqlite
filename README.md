@@ -45,7 +45,7 @@ beancount-sqlite load main.bean \
 
 | Flag | Description |
 |---|---|
-| `--tags-yaml FILE` | Populate tag `label`/`group` from a YAML file — same format as the [`check_valid_tags`](https://github.com/slimslickner/beancount-plugins/blob/main/beancount_plugins/check_valid_tags.py) plugin |
+| `--tags-yaml FILE` | Populate tag `label` from a YAML file — same format as the [`check_valid_tags`](https://github.com/slimslickner/beancount-plugins/blob/main/beancount_plugins/check_valid_tags.py) plugin |
 | `--post-sql FILE` | Run a SQL file after the main load; repeatable. Use for custom views, indexes, or `schema_description` entries. |
 
 Loading aborts if `bean-check` reports errors. Each run writes to a temp file and renames atomically — a failed load never corrupts the existing database.
@@ -58,7 +58,7 @@ Query using the **views** — they flatten joins and metadata into clean, named 
 
 | View | Description |
 |---|---|
-| `v_accounts` | Accounts with `label` and `group` |
+| `v_accounts` | Accounts with `label` |
 | `v_transactions` | Transactions with comma-separated `tags` and `links` |
 | `v_postings` | All postings with account and transaction context |
 | `v_spending` | Expense postings — filtered subset of `v_postings` |
@@ -71,21 +71,19 @@ Query using the **views** — they flatten joins and metadata into clean, named 
 
 ## Semantic layer
 
-Accounts and tags carry human-readable labels and groups, exposed as columns in the views.
+Accounts and tags carry human-readable labels, exposed as columns in the views.
 
 **Accounts** — set metadata on `open` directives in your `.bean` file (the [`check_valid_metadata`](https://github.com/slimslickner/beancount-plugins/blob/main/beancount_plugins/check_valid_metadata.py) plugin can enforce these):
 
 ```beancount
 2020-01-01 open Assets:Checking:Primary USD
   label: "Primary Checking"
-  group: "Cash"
 
 2020-01-01 open Expenses:Groceries USD
   label: "Groceries"
-  group: "Living Expenses"
 ```
 
-These surface as `account_label` and `account_group` in all posting views.
+These surface as `account_label` in all posting views.
 
 **Tags** — provide a YAML file via `--tags-yaml` (same format as `check_valid_tags`):
 
@@ -93,7 +91,6 @@ These surface as `account_label` and `account_group` in all posting views.
 tags:
   vacation-2024:
     description: "Summer 2024 vacation"
-    group: "Vacations"
 ```
 
 ## Extending
@@ -105,13 +102,13 @@ Use `--post-sql` to add custom views or derived tables without modifying this pa
 CREATE VIEW v_monthly_spending AS
 SELECT
     strftime('%Y-%m', "date") AS month,
-    account_group,
+    account_label,
     SUM(CAST(amount_number AS REAL)) AS total
 FROM v_spending
 GROUP BY 1, 2;
 
 INSERT INTO schema_description (object_type, name, description)
-VALUES ('view', 'v_monthly_spending', 'Monthly spending totals by account group.');
+VALUES ('view', 'v_monthly_spending', 'Monthly spending totals by account label.');
 ```
 
 ## Schema

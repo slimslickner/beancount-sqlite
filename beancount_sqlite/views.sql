@@ -20,25 +20,20 @@ DROP VIEW IF EXISTS v_queries;
 DROP VIEW IF EXISTS v_custom;
 DROP VIEW IF EXISTS v_accounts;
 
--- v_accounts: accounts with label/group from open_metadata.
+-- v_accounts: accounts with label from open_metadata.
 CREATE VIEW v_accounts AS
 SELECT
     a.id,
     a.name,
     a.account_type,
     om_label."value" AS label,
-    om_group."value" AS "group",
     a.open_date,
     a.close_date
 FROM account AS a
 LEFT JOIN open_metadata AS om_label
     ON
         a.id = om_label.account_id
-        AND om_label."key" = 'label'
-LEFT JOIN open_metadata AS om_group
-    ON
-        a.id = om_group.account_id
-        AND om_group."key" = 'group';
+        AND om_label."key" = 'label';
 
 -- v_commodities: commodities with common metadata keys pivoted as columns.
 CREATE VIEW v_commodities AS
@@ -69,13 +64,12 @@ LEFT JOIN commodity_metadata AS cm_quote
         c.id = cm_quote.commodity_id
         AND cm_quote."key" = 'quote';
 
--- v_tags: tags with label and group.
+-- v_tags: tags with label.
 CREATE VIEW v_tags AS
 SELECT
     id,
     name,
-    label,
-    "group"
+    label
 FROM tag;
 
 -- v_transactions: transactions with comma-separated tags and links.
@@ -128,7 +122,7 @@ SELECT
 FROM "custom";
 
 -- v_postings: all postings with account and transaction context.
--- Joins v_accounts so account_label/account_group are included directly.
+-- Joins v_accounts so account_label is included directly.
 CREATE VIEW v_postings AS
 SELECT
     p.id AS posting_id,
@@ -139,7 +133,6 @@ SELECT
     a.name AS account,
     a.account_type,
     a.label AS account_label,
-    a."group" AS account_group,
     p.amount_number,
     p.amount_currency,
     (
@@ -172,7 +165,6 @@ SELECT
     va.name AS account,
     va.account_type,
     va.label AS account_label,
-    va."group" AS account_group,
     a.amount_number,
     a.amount_currency
 FROM assertion AS a
@@ -186,7 +178,6 @@ SELECT
     va.name AS account,
     va.account_type,
     va.label AS account_label,
-    va."group" AS account_group,
     d.filename
 FROM document AS d
 INNER JOIN v_accounts AS va ON d.account_id = va.id;
@@ -199,7 +190,6 @@ SELECT
     va.name AS account,
     va.account_type,
     va.label AS account_label,
-    va."group" AS account_group,
     n.comment
 FROM note AS n
 INNER JOIN v_accounts AS va ON n.account_id = va.id;
@@ -215,7 +205,6 @@ SELECT
     account,
     account_type,
     account_label,
-    account_group,
     amount_number,
     amount_currency,
     tags
@@ -234,7 +223,6 @@ SELECT
     account,
     account_type,
     account_label,
-    account_group,
     amount_number,
     amount_currency,
     tags

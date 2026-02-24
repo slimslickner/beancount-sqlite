@@ -1,6 +1,5 @@
 -- SQLite schema for beancount database
--- Custom types are not supported in SQLite, we'll use TEXT to store JSON-like strings
--- for complex types like amount, lot etc.
+-- Custom types are not supported in SQLite, so use TEXT for JSON
 -- Account type table (如: Equity, Assets, Liabilities, Income, Expenses)
 CREATE TABLE account_type (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -12,7 +11,7 @@ CREATE TABLE account_category (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     parent_id INTEGER,
-    account_type TEXT NOT NULL CHECK(
+    account_type TEXT NOT NULL CHECK (
         account_type IN (
             'Assets',
             'Liabilities',
@@ -21,7 +20,7 @@ CREATE TABLE account_category (
             'Expenses'
         )
     ),
-    FOREIGN KEY (parent_id) REFERENCES account_category(id),
+    FOREIGN KEY (parent_id) REFERENCES account_category (id),
     UNIQUE (name, parent_id, account_type)
 );
 
@@ -29,7 +28,7 @@ CREATE TABLE account_category (
 CREATE TABLE account (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
-    account_type TEXT NOT NULL CHECK(
+    account_type TEXT NOT NULL CHECK (
         account_type IN (
             'Assets',
             'Liabilities',
@@ -43,7 +42,7 @@ CREATE TABLE account (
     close_date DATE,
     meta TEXT DEFAULT '{}' NOT NULL,
     -- JSON object
-    FOREIGN KEY (account_category_id) REFERENCES account_category(id)
+    FOREIGN KEY (account_category_id) REFERENCES account_category (id)
 );
 
 -- Account currencies table (replaces currencies array)
@@ -51,7 +50,7 @@ CREATE TABLE account_currency (
     account_id INTEGER NOT NULL,
     currency TEXT NOT NULL,
     PRIMARY KEY (account_id, currency),
-    FOREIGN KEY (account_id) REFERENCES account(id)
+    FOREIGN KEY (account_id) REFERENCES account (id)
 );
 
 -- Transaction table
@@ -73,8 +72,8 @@ CREATE TABLE transaction_tag (
     transaction_id INTEGER NOT NULL,
     tag_id INTEGER NOT NULL,
     PRIMARY KEY (transaction_id, tag_id),
-    FOREIGN KEY (transaction_id) REFERENCES "transaction"(id),
-    FOREIGN KEY (tag_id) REFERENCES tag(id)
+    FOREIGN KEY (transaction_id) REFERENCES "transaction" (id),
+    FOREIGN KEY (tag_id) REFERENCES tag (id)
 );
 
 -- Links table
@@ -88,15 +87,15 @@ CREATE TABLE transaction_link (
     transaction_id INTEGER NOT NULL,
     link_id INTEGER NOT NULL,
     PRIMARY KEY (transaction_id, link_id),
-    FOREIGN KEY (transaction_id) REFERENCES "transaction"(id),
-    FOREIGN KEY (link_id) REFERENCES link(id)
+    FOREIGN KEY (transaction_id) REFERENCES "transaction" (id),
+    FOREIGN KEY (link_id) REFERENCES link (id)
 );
 
 -- Posting table
 -- For amount type: {number: DECIMAL, currency: TEXT}
 CREATE TABLE posting (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date DATE NOT NULL,
+    "date" DATE NOT NULL,
     account_id INTEGER NOT NULL,
     transaction_id INTEGER NOT NULL,
     flag TEXT,
@@ -112,20 +111,20 @@ CREATE TABLE posting (
     cost_date DATE,
     cost_label TEXT,
     matching_lot_id INTEGER,
-    FOREIGN KEY (account_id) REFERENCES account(id),
-    FOREIGN KEY (transaction_id) REFERENCES "transaction"(id),
-    FOREIGN KEY (matching_lot_id) REFERENCES posting(id)
+    FOREIGN KEY (account_id) REFERENCES account (id),
+    FOREIGN KEY (transaction_id) REFERENCES "transaction" (id),
+    FOREIGN KEY (matching_lot_id) REFERENCES posting (id)
 );
 
 -- Create indexes for posting table
-CREATE INDEX posting_account_id_date_id_idx ON posting(account_id, date, id);
+CREATE INDEX posting_account_id_date_id_idx ON posting (account_id, date, id);
 
-CREATE INDEX posting_transaction_id_idx ON posting(transaction_id);
+CREATE INDEX posting_transaction_id_idx ON posting (transaction_id);
 
 -- Commodity table
 CREATE TABLE commodity (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date DATE NOT NULL,
+    "date" DATE NOT NULL,
     currency TEXT NOT NULL UNIQUE,
     meta TEXT DEFAULT '{}' NOT NULL,
     -- JSON object
@@ -136,7 +135,7 @@ CREATE TABLE commodity (
 -- Price table
 CREATE TABLE price (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date DATE NOT NULL,
+    "date" DATE NOT NULL,
     currency TEXT NOT NULL,
     amount_number DECIMAL NOT NULL,
     amount_currency TEXT NOT NULL
@@ -145,21 +144,21 @@ CREATE TABLE price (
 -- Assertion table (previously called balance)
 CREATE TABLE assertion (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date DATE NOT NULL,
+    "date" DATE NOT NULL,
     account_id INTEGER NOT NULL,
     amount_number DECIMAL NOT NULL,
     amount_currency TEXT NOT NULL,
-    FOREIGN KEY (account_id) REFERENCES account(id)
+    FOREIGN KEY (account_id) REFERENCES account (id)
 );
 
 -- Document table
 CREATE TABLE document (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date DATE NOT NULL,
+    "date" DATE NOT NULL,
     account_id INTEGER NOT NULL,
     data BLOB NOT NULL,
     filename TEXT NOT NULL,
-    FOREIGN KEY (account_id) REFERENCES account(id)
+    FOREIGN KEY (account_id) REFERENCES account (id)
 );
 
 -- Note: The following PostgreSQL features are not directly supported in SQLite:
