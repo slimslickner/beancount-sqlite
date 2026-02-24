@@ -28,7 +28,6 @@ CREATE TABLE IF NOT EXISTS account (
     account_category_id INTEGER NOT NULL,
     open_date TEXT NOT NULL,
     close_date TEXT,
-    meta TEXT NOT NULL DEFAULT '{}',
     FOREIGN KEY (account_category_id) REFERENCES account_category (id)
 );
 
@@ -112,8 +111,7 @@ CREATE TABLE IF NOT EXISTS commodity (
     id INTEGER PRIMARY KEY,
     "date" TEXT NOT NULL,
     currency TEXT NOT NULL UNIQUE CHECK (currency != ''),
-    decimal_places INTEGER NOT NULL DEFAULT 0,
-    meta TEXT NOT NULL DEFAULT '{}'
+    decimal_places INTEGER NOT NULL DEFAULT 0
 );
 
 -- Price table
@@ -175,4 +173,94 @@ CREATE TABLE IF NOT EXISTS "custom" (
     "date" TEXT NOT NULL,
     type TEXT NOT NULL,
     "values" TEXT NOT NULL DEFAULT '[]'
+);
+
+-- Metadata tables (normalized key/value, one row per metadata entry).
+-- value_type encodes the original beancount grammar type:
+--   str     → STRING, account name, currency, or tag token
+--   bool    → BOOL
+--   date    → DATE
+--   decimal → number expression (Decimal)
+--   amount  → amount literal, stored as "<number> <currency>"
+--   null    → NONE or empty value
+
+CREATE TABLE IF NOT EXISTS transaction_metadata (
+    id INTEGER PRIMARY KEY,
+    transaction_id INTEGER NOT NULL,
+    "key" TEXT NOT NULL,
+    "value" TEXT,
+    value_type TEXT NOT NULL,
+    FOREIGN KEY (transaction_id) REFERENCES "transaction" (id)
+);
+
+CREATE TABLE IF NOT EXISTS posting_metadata (
+    id INTEGER PRIMARY KEY,
+    posting_id INTEGER NOT NULL,
+    "key" TEXT NOT NULL,
+    "value" TEXT,
+    value_type TEXT NOT NULL,
+    FOREIGN KEY (posting_id) REFERENCES posting (id)
+);
+
+CREATE TABLE IF NOT EXISTS open_metadata (
+    id INTEGER PRIMARY KEY,
+    account_id INTEGER NOT NULL,
+    "key" TEXT NOT NULL,
+    "value" TEXT,
+    value_type TEXT NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES account (id)
+);
+
+CREATE TABLE IF NOT EXISTS close_metadata (
+    id INTEGER PRIMARY KEY,
+    account_id INTEGER NOT NULL,
+    "key" TEXT NOT NULL,
+    "value" TEXT,
+    value_type TEXT NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES account (id)
+);
+
+CREATE TABLE IF NOT EXISTS commodity_metadata (
+    id INTEGER PRIMARY KEY,
+    commodity_id INTEGER NOT NULL,
+    "key" TEXT NOT NULL,
+    "value" TEXT,
+    value_type TEXT NOT NULL,
+    FOREIGN KEY (commodity_id) REFERENCES commodity (id)
+);
+
+CREATE TABLE IF NOT EXISTS balance_metadata (
+    id INTEGER PRIMARY KEY,
+    assertion_id INTEGER NOT NULL,
+    "key" TEXT NOT NULL,
+    "value" TEXT,
+    value_type TEXT NOT NULL,
+    FOREIGN KEY (assertion_id) REFERENCES assertion (id)
+);
+
+CREATE TABLE IF NOT EXISTS note_metadata (
+    id INTEGER PRIMARY KEY,
+    note_id INTEGER NOT NULL,
+    "key" TEXT NOT NULL,
+    "value" TEXT,
+    value_type TEXT NOT NULL,
+    FOREIGN KEY (note_id) REFERENCES note (id)
+);
+
+CREATE TABLE IF NOT EXISTS document_metadata (
+    id INTEGER PRIMARY KEY,
+    document_id INTEGER NOT NULL,
+    "key" TEXT NOT NULL,
+    "value" TEXT,
+    value_type TEXT NOT NULL,
+    FOREIGN KEY (document_id) REFERENCES document (id)
+);
+
+CREATE TABLE IF NOT EXISTS price_metadata (
+    id INTEGER PRIMARY KEY,
+    price_id INTEGER NOT NULL,
+    "key" TEXT NOT NULL,
+    "value" TEXT,
+    value_type TEXT NOT NULL,
+    FOREIGN KEY (price_id) REFERENCES price (id)
 );

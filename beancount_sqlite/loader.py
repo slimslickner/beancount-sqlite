@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import sqlite3
@@ -11,13 +12,28 @@ from pathlib import Path
 from typing import Any
 
 from beancount import loader as bean_loader
+from beancount.core import amount as bean_amount
 from beancount.core import data
 
 log = logging.getLogger(__name__)
 
+# Keys always stripped from metadata before storing.
+_META_SKIP = frozenset({"filename", "lineno"})
+
 # Deletion order: children before parents to satisfy FK constraints.
 # account_category is self-referential, so FK checks are disabled during clear.
 _CLEAR_ORDER = [
+    # metadata tables (reference their parent directive tables)
+    "price_metadata",
+    "document_metadata",
+    "note_metadata",
+    "balance_metadata",
+    "commodity_metadata",
+    "close_metadata",
+    "open_metadata",
+    "posting_metadata",
+    "transaction_metadata",
+    # phase 2 tables
     '"custom"',
     '"query"',
     "event",
@@ -38,23 +54,26 @@ _CLEAR_ORDER = [
 ]
 
 
-class _MetaEncoder(json.JSONEncoder):
-    """JSON encoder that handles Decimal and date objects from beancount metadata."""
+def _encode_meta_value(value: Any) -> tuple[str | None, str] | None:
+    """Encode a beancount metadata value as (string_repr, value_type).
 
-    def default(self, o: object) -> object:
-        if isinstance(o, Decimal):
-            return str(o)
-        import datetime
-
-        if isinstance(o, datetime.date):
-            return o.isoformat()
-        return super().default(o)
-
-
-def _meta_to_json(meta: dict[str, Any]) -> str:
-    """Serialize beancount metadata to JSON, stripping parser-internal keys."""
-    filtered = {k: v for k, v in meta.items() if k not in {"filename", "lineno"}}
-    return json.dumps(filtered, cls=_MetaEncoder)
+    Returns None if the value type is not supported and should be skipped.
+    value_type matches the beancount grammar token types:
+      str, bool, date, decimal, amount, null
+    """
+    if value is None:
+        return (None, "null")
+    if isinstance(value, bool):
+        return ("true" if value else "false", "bool")
+    if isinstance(value, str):
+        return (value, "str")
+    if isinstance(value, Decimal):
+        return (str(value), "decimal")
+    if isinstance(value, datetime.date):
+        return (value.isoformat(), "date")
+    if isinstance(value, bean_amount.Amount):
+        return (f"{value.number} {value.currency}", "amount")
+    return None
 
 
 class BeanSQLiteLoader:
@@ -149,6 +168,37 @@ class BeanSQLiteLoader:
         assert parent_id is not None
         return parent_id
 
+    def _insert_meta(
+        self,
+        table: str,
+        fk_col: str,
+        fk_id: int,
+        meta: dict[str, Any],
+        skip_keys: frozenset[str] = frozenset(),
+    ) -> None:
+        """Insert normalized metadata rows for one directive."""
+        assert self._conn is not None
+        rows = []
+        for key, value in meta.items():
+            if key in _META_SKIP or key.startswith("__") or key in skip_keys:
+                continue
+            encoded = _encode_meta_value(value)
+            if encoded is None:
+                log.debug(
+                    "Skipping metadata key %r: unsupported type %s",
+                    key,
+                    type(value).__name__,
+                )
+                continue
+            value_str, value_type = encoded
+            rows.append((fk_id, key, value_str, value_type))
+        if rows:
+            self._conn.executemany(
+                f'INSERT INTO {table} ({fk_col}, "key", "value", value_type)'  # noqa: S608
+                " VALUES (?, ?, ?, ?)",
+                rows,
+            )
+
     # ------------------------------------------------------------------
     # Directive importers
     # ------------------------------------------------------------------
@@ -163,14 +213,13 @@ class BeanSQLiteLoader:
                 cat_id = self._ensure_category(account_type, categories)
                 cur = self._conn.execute(
                     "INSERT INTO account"
-                    " (name, account_type, account_category_id, open_date, meta)"
-                    " VALUES (?, ?, ?, ?, ?)",
+                    " (name, account_type, account_category_id, open_date)"
+                    " VALUES (?, ?, ?, ?)",
                     (
                         entry.account,
                         account_type,
                         cat_id,
                         entry.date.isoformat(),
-                        _meta_to_json(entry.meta),
                     ),
                 )
                 assert cur.lastrowid is not None
@@ -183,12 +232,18 @@ class BeanSQLiteLoader:
                             " (account_id, currency) VALUES (?, ?)",
                             (account_id, currency),
                         )
+                self._insert_meta("open_metadata", "account_id", account_id, entry.meta)
 
             elif isinstance(entry, data.Close):
                 self._conn.execute(
                     "UPDATE account SET close_date = ? WHERE name = ?",
                     (entry.date.isoformat(), entry.account),
                 )
+                account_id = self._account_map.get(entry.account)
+                if account_id is not None:
+                    self._insert_meta(
+                        "close_metadata", "account_id", account_id, entry.meta
+                    )
 
     def _import_transactions(self, entries: list[Any]) -> None:
         assert self._conn is not None
@@ -208,6 +263,7 @@ class BeanSQLiteLoader:
             )
             assert cur.lastrowid is not None
             txn_id = cur.lastrowid
+            self._insert_meta("transaction_metadata", "transaction_id", txn_id, entry.meta)
 
             for tag in entry.tags:
                 self._conn.execute(
@@ -251,7 +307,7 @@ class BeanSQLiteLoader:
                 price = posting.price
                 cost = posting.cost
 
-                self._conn.execute(
+                pcur = self._conn.execute(
                     "INSERT INTO posting ("
                     " date, account_id, transaction_id, flag,"
                     " amount_number, amount_currency,"
@@ -277,6 +333,10 @@ class BeanSQLiteLoader:
                         cost.label if cost is not None else None,
                     ),
                 )
+                assert pcur.lastrowid is not None
+                self._insert_meta(
+                    "posting_metadata", "posting_id", pcur.lastrowid, posting.meta
+                )
 
     def _import_balances(self, entries: list[Any]) -> None:
         assert self._conn is not None
@@ -291,7 +351,7 @@ class BeanSQLiteLoader:
                     entry.date,
                 )
                 continue
-            self._conn.execute(
+            acur = self._conn.execute(
                 "INSERT INTO assertion"
                 " (date, account_id, amount_number, amount_currency)"
                 " VALUES (?, ?, ?, ?)",
@@ -302,13 +362,15 @@ class BeanSQLiteLoader:
                     entry.amount.currency,
                 ),
             )
+            assert acur.lastrowid is not None
+            self._insert_meta("balance_metadata", "assertion_id", acur.lastrowid, entry.meta)
 
     def _import_prices(self, entries: list[Any]) -> None:
         assert self._conn is not None
         for entry in entries:
             if not isinstance(entry, data.Price):
                 continue
-            self._conn.execute(
+            pricecur = self._conn.execute(
                 "INSERT INTO price (date, currency, amount_number, amount_currency)"
                 " VALUES (?, ?, ?, ?)",
                 (
@@ -318,6 +380,8 @@ class BeanSQLiteLoader:
                     entry.amount.currency,
                 ),
             )
+            assert pricecur.lastrowid is not None
+            self._insert_meta("price_metadata", "price_id", pricecur.lastrowid, entry.meta)
 
     def _import_commodities(self, entries: list[Any]) -> None:
         assert self._conn is not None
@@ -325,17 +389,24 @@ class BeanSQLiteLoader:
             if not isinstance(entry, data.Commodity):
                 continue
             decimal_places = int(entry.meta.get("decimal_places", 0))
-            self._conn.execute(
+            commcur = self._conn.execute(
                 "INSERT OR IGNORE INTO commodity"
-                " (date, currency, decimal_places, meta)"
-                " VALUES (?, ?, ?, ?)",
+                " (date, currency, decimal_places)"
+                " VALUES (?, ?, ?)",
                 (
                     entry.date.isoformat(),
                     entry.currency,
                     decimal_places,
-                    _meta_to_json(entry.meta),
                 ),
             )
+            if commcur.lastrowid:
+                self._insert_meta(
+                    "commodity_metadata",
+                    "commodity_id",
+                    commcur.lastrowid,
+                    entry.meta,
+                    skip_keys=frozenset({"decimal_places"}),
+                )
 
     def _import_documents(self, entries: list[Any], base_path: Path) -> None:
         assert self._conn is not None
@@ -354,9 +425,13 @@ class BeanSQLiteLoader:
                 filename = str(Path(entry.filename).relative_to(base_path))
             except ValueError:
                 filename = entry.filename
-            self._conn.execute(
+            doccur = self._conn.execute(
                 "INSERT INTO document (date, account_id, filename) VALUES (?, ?, ?)",
                 (entry.date.isoformat(), account_id, filename),
+            )
+            assert doccur.lastrowid is not None
+            self._insert_meta(
+                "document_metadata", "document_id", doccur.lastrowid, entry.meta
             )
 
     def _import_notes(self, entries: list[Any]) -> None:
@@ -372,9 +447,13 @@ class BeanSQLiteLoader:
                     entry.date,
                 )
                 continue
-            self._conn.execute(
+            notecur = self._conn.execute(
                 "INSERT INTO note (date, account_id, comment) VALUES (?, ?, ?)",
                 (entry.date.isoformat(), account_id, entry.comment),
+            )
+            assert notecur.lastrowid is not None
+            self._insert_meta(
+                "note_metadata", "note_id", notecur.lastrowid, entry.meta
             )
 
     def _import_events(self, entries: list[Any]) -> None:

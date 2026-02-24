@@ -60,16 +60,16 @@ document_metadata    (id, document_id,    key, value, value_type)
 price_metadata       (id, price_id,       key, value, value_type)
 ```
 
-**`value_type` column** encodes the original Python type so values can be deserialized correctly:
+**`value_type` column** encodes the original beancount grammar token type:
 
-| value_type | Python type       | Example stored value         |
+| value_type | Beancount grammar | Example stored value         |
 |------------|-------------------|------------------------------|
-| `str`      | `str`             | `"Whole Foods"`              |
-| `int`      | `int`             | `"42"`                       |
-| `decimal`  | `Decimal`         | `"123.45"`                   |
-| `bool`     | `bool`            | `"true"`                     |
-| `date`     | `datetime.date`   | `"2024-01-15"`               |
-| `amount`   | `Amount`          | `"123.45 USD"`               |
+| `str`      | STRING, account, currency, TAG | `"Whole Foods"`   |
+| `bool`     | BOOL              | `"true"`                     |
+| `date`     | DATE              | `"2024-01-15"`               |
+| `decimal`  | number_expr       | `"123.45"`                   |
+| `amount`   | amount            | `"123.45 USD"`               |
+| `null`     | NONE / empty      | `null`                       |
 
 Remove the existing JSON `meta` blobs from `account` and `commodity` in favor of these normalized tables.
 
