@@ -32,10 +32,10 @@ beancount-sqlite load main.bean ledger.db
 
 Add tables for all Beancount directives not currently handled.
 
-- [ ] `note` — account notes and annotations
-- [ ] `event` — named life events (e.g. job changes, moves)
-- [ ] `query` — named BQL queries defined in the ledger
-- [ ] `custom` — catch-all for custom directives (Fava sidebar links, plugin config, etc.)
+- [x] `note` — account notes and annotations
+- [x] `event` — named life events (e.g. job changes, moves)
+- [x] `query` — named BQL queries defined in the ledger
+- [x] `custom` — catch-all for custom directives (Fava sidebar links, plugin config, etc.)
 
 Each table follows the same pattern: `id`, `date`, foreign key to relevant entity, and directive-specific fields.
 

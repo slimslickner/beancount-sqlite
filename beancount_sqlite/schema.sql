@@ -143,3 +143,36 @@ CREATE TABLE IF NOT EXISTS document (
     filename TEXT NOT NULL,
     FOREIGN KEY (account_id) REFERENCES account (id)
 );
+
+-- Note table (Note directives)
+CREATE TABLE IF NOT EXISTS note (
+    id INTEGER PRIMARY KEY,
+    "date" TEXT NOT NULL,
+    account_id INTEGER NOT NULL,
+    comment TEXT NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES account (id)
+);
+
+-- Event table (Event directives)
+CREATE TABLE IF NOT EXISTS event (
+    id INTEGER PRIMARY KEY,
+    "date" TEXT NOT NULL,
+    type TEXT NOT NULL,
+    description TEXT NOT NULL
+);
+
+-- Query table (Query directives)
+CREATE TABLE IF NOT EXISTS "query" (
+    id INTEGER PRIMARY KEY,
+    "date" TEXT NOT NULL,
+    name TEXT NOT NULL,
+    query_string TEXT NOT NULL
+);
+
+-- Custom table (Custom directives)
+CREATE TABLE IF NOT EXISTS "custom" (
+    id INTEGER PRIMARY KEY,
+    "date" TEXT NOT NULL,
+    type TEXT NOT NULL,
+    "values" TEXT NOT NULL DEFAULT '[]'
+);

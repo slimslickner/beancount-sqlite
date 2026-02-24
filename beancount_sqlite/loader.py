@@ -18,6 +18,10 @@ log = logging.getLogger(__name__)
 # Deletion order: children before parents to satisfy FK constraints.
 # account_category is self-referential, so FK checks are disabled during clear.
 _CLEAR_ORDER = [
+    '"custom"',
+    '"query"',
+    "event",
+    "note",
     "document",
     "assertion",
     "price",
@@ -89,6 +93,10 @@ class BeanSQLiteLoader:
             self._import_prices(entries)
             self._import_commodities(entries)
             self._import_documents(entries, bean_file.parent)
+            self._import_notes(entries)
+            self._import_events(entries)
+            self._import_queries(entries)
+            self._import_customs(entries)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -349,4 +357,61 @@ class BeanSQLiteLoader:
             self._conn.execute(
                 "INSERT INTO document (date, account_id, filename) VALUES (?, ?, ?)",
                 (entry.date.isoformat(), account_id, filename),
+            )
+
+    def _import_notes(self, entries: list[Any]) -> None:
+        assert self._conn is not None
+        for entry in entries:
+            if not isinstance(entry, data.Note):
+                continue
+            account_id = self._account_map.get(entry.account)
+            if account_id is None:
+                log.warning(
+                    "Unknown account %r in note on %s — skipping",
+                    entry.account,
+                    entry.date,
+                )
+                continue
+            self._conn.execute(
+                "INSERT INTO note (date, account_id, comment) VALUES (?, ?, ?)",
+                (entry.date.isoformat(), account_id, entry.comment),
+            )
+
+    def _import_events(self, entries: list[Any]) -> None:
+        assert self._conn is not None
+        for entry in entries:
+            if not isinstance(entry, data.Event):
+                continue
+            self._conn.execute(
+                "INSERT INTO event (date, type, description) VALUES (?, ?, ?)",
+                (entry.date.isoformat(), entry.type, entry.description),
+            )
+
+    def _import_queries(self, entries: list[Any]) -> None:
+        assert self._conn is not None
+        for entry in entries:
+            if not isinstance(entry, data.Query):
+                continue
+            self._conn.execute(
+                'INSERT INTO "query" (date, name, query_string) VALUES (?, ?, ?)',
+                (entry.date.isoformat(), entry.name, entry.query_string),
+            )
+
+    def _import_customs(self, entries: list[Any]) -> None:
+        assert self._conn is not None
+        for entry in entries:
+            if not isinstance(entry, data.Custom):
+                continue
+            self._conn.execute(
+                'INSERT INTO "custom" (date, type, values) VALUES (?, ?, ?)',
+                (
+                    entry.date.isoformat(),
+                    entry.type,
+                    json.dumps(
+                        [
+                            str(v.value) if hasattr(v, "value") else str(v)
+                            for v in entry.values
+                        ]
+                    ),
+                ),
             )
