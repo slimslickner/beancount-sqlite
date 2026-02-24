@@ -64,12 +64,11 @@ LEFT JOIN commodity_metadata AS cm_quote
         c.id = cm_quote.commodity_id
         AND cm_quote."key" = 'quote';
 
--- v_tags: tags with label.
+-- v_tags: tags. Join tag_metadata for custom attributes.
 CREATE VIEW v_tags AS
 SELECT
     id,
-    name,
-    label
+    name
 FROM tag;
 
 -- v_transactions: transactions with comma-separated tags and links.

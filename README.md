@@ -85,12 +85,13 @@ Accounts and tags carry human-readable labels, exposed as columns in the views.
 
 These surface as `account_label` in all posting views.
 
-**Tags** — provide a YAML file via `--tags-yaml` (same format as `check_valid_tags`):
+**Tags** — provide a YAML file via `--tags-yaml` (same format as `check_valid_tags`). All keys under each tag name are stored as rows in `tag_metadata` and can be queried or pivoted freely:
 
 ```yaml
 tags:
   vacation-2024:
-    description: "Summer 2024 vacation"
+    label: "Summer 2024 vacation"
+    category: "Travel"
 ```
 
 ## Extending

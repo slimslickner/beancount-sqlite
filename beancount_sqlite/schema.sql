@@ -51,8 +51,7 @@ CREATE TABLE IF NOT EXISTS "transaction" (
 -- Tag table
 CREATE TABLE IF NOT EXISTS tag (
     id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    label TEXT
+    name TEXT NOT NULL UNIQUE
 );
 
 -- Transaction <-> tag junction
@@ -184,6 +183,15 @@ CREATE TABLE IF NOT EXISTS "custom" (
 --   decimal → number expression (Decimal)
 --   amount  → amount literal, stored as "<number> <currency>"
 --   null    → NONE or empty value
+
+CREATE TABLE IF NOT EXISTS tag_metadata (
+    id INTEGER PRIMARY KEY,
+    tag_id INTEGER NOT NULL,
+    "key" TEXT NOT NULL,
+    "value" TEXT,
+    value_type TEXT NOT NULL,
+    FOREIGN KEY (tag_id) REFERENCES tag (id)
+);
 
 CREATE TABLE IF NOT EXISTS transaction_metadata (
     id INTEGER PRIMARY KEY,

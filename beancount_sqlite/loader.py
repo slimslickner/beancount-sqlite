@@ -30,7 +30,7 @@ _BUILTIN_DESCRIPTIONS: list[tuple[str, str, str]] = [
         "v_commodities",
         "Commodities with common metadata keys pivoted as columns: `name`, `asset_class`, `asset_subclass`, `quote`.",
     ),
-    ("view", "v_tags", "Tags with `label`."),
+    ("view", "v_tags", "Tags. Join `tag_metadata` for custom attributes loaded via `--tags-yaml`."),
     ("view", "v_transactions", "Transactions with comma-separated `tags` and `links`."),
     ("view", "v_events", "Life events (job changes, moves, etc.)."),
     ("view", "v_queries", "Named BQL queries defined in the ledger."),
@@ -265,12 +265,15 @@ class BeanSQLiteLoader:
         log.info("Schema doc written to %s", doc_path)
 
     def _import_tags_yaml(self, tags_yaml: Path) -> None:
-        """Populate tag label from a tags YAML file.
+        """Load tag metadata from a YAML file into tag_metadata.
 
         Expected format:
           tags:
             tag-name:
-              description: "Human-readable label"
+              any-key: any-value
+              ...
+
+        All keys under each tag name are stored as tag_metadata rows.
         """
         assert self._conn is not None
         log.info("Loading tags from %s", tags_yaml)
@@ -280,15 +283,28 @@ class BeanSQLiteLoader:
             log.warning("No 'tags' key found in %s — skipping", tags_yaml)
             return
         for name, attrs in tags.items():
+            self._conn.execute(
+                "INSERT OR IGNORE INTO tag (name) VALUES (?)", (name,)
+            )
+            row = self._conn.execute(
+                "SELECT id FROM tag WHERE name = ?", (name,)
+            ).fetchone()
+            assert row is not None
+            tag_id = row[0]
             if not isinstance(attrs, dict):
                 continue
-            label = attrs.get("description")
-            self._conn.execute(
-                "INSERT INTO tag (name, label) VALUES (?, ?)"
-                " ON CONFLICT (name) DO UPDATE SET"
-                "   label = excluded.label",
-                (name, label),
-            )
+            for key, value in attrs.items():
+                if value is None:
+                    value_str, value_type = None, "null"
+                elif isinstance(value, bool):
+                    value_str, value_type = ("true" if value else "false"), "bool"
+                else:
+                    value_str, value_type = str(value), "str"
+                self._conn.execute(
+                    'INSERT OR REPLACE INTO tag_metadata'
+                    ' (tag_id, "key", "value", value_type) VALUES (?, ?, ?, ?)',
+                    (tag_id, key, value_str, value_type),
+                )
 
     def _ensure_category(self, account_type: str, categories: list[str]) -> int:
         """Return the leaf category ID, creating any missing hierarchy nodes."""
